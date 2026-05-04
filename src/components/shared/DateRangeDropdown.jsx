@@ -59,7 +59,7 @@ const DateRangeDropdown = ({
       </button>
 
       {showDropdown && (
-        <div className="absolute right-0 mt-2 w-72 bg-cg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
+        <div className="absolute right-0 mt-2 w-80 bg-cg-white rounded-lg shadow-lg border border-gray-200 z-50 overflow-hidden">
           <div className="py-1">
             {dateRangeOptions.filter(opt => opt.value !== 'custom').map(option => (
               <button
@@ -81,20 +81,25 @@ const DateRangeDropdown = ({
           
           <div className="border-t border-gray-200 p-3">
             <div className="text-sm font-medium text-cg-dark mb-2">Custom Range</div>
-            <div className="flex gap-2 mb-2">
-              <input
-                type="date"
-                value={customDateStart}
-                onChange={(e) => setCustomDateStart(e.target.value)}
-                className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cg-green focus:border-transparent"
-              />
-              <span className="text-cg-dark self-center">to</span>
-              <input
-                type="date"
-                value={customDateEnd}
-                onChange={(e) => setCustomDateEnd(e.target.value)}
-                className="flex-1 px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cg-green focus:border-transparent"
-              />
+            <div className="flex flex-col gap-2 mb-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-cg-dark/70">Start</label>
+                <input
+                  type="date"
+                  value={customDateStart}
+                  onChange={(e) => setCustomDateStart(e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cg-green focus:border-transparent"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs text-cg-dark/70">End</label>
+                <input
+                  type="date"
+                  value={customDateEnd}
+                  onChange={(e) => setCustomDateEnd(e.target.value)}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-cg-green focus:border-transparent"
+                />
+              </div>
             </div>
             <button
               onClick={handleApplyCustomRange}

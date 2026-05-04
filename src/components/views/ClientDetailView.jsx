@@ -68,11 +68,11 @@ const renderPieLabel = ({ cx, cy, midAngle, outerRadius, percent, hours }) => {
   const y = cy + radius * Math.sin(-midAngle * RADIAN);
 
   return (
-    <text 
-      x={x} 
-      y={y} 
+    <text
+      x={x}
+      y={y}
       fill={GRAY[700]}
-      textAnchor={x > cx ? 'start' : 'end'} 
+      textAnchor={x > cx ? 'start' : 'end'}
       dominantBaseline="central"
       fontSize={12}
     >
@@ -330,19 +330,44 @@ const ClientDetailView = ({ clientName }) => {
     }));
   }, [clientEntries, getRate, userMap]);
 
-  // Monthly trend data
-  const monthlyTrend = useMemo(() => {
-    const monthlyData = {};
-    
+  // Trend data — bucket weekly if span ≤ ~4 months, else monthly
+  const trendData = useMemo(() => {
+    if (clientEntries.length === 0) return [];
+
+    let minDate = null;
+    let maxDate = null;
+    clientEntries.forEach(entry => {
+      const d = getEntryDate(entry);
+      if (!minDate || d < minDate) minDate = d;
+      if (!maxDate || d > maxDate) maxDate = d;
+    });
+
+    const spanDays = (maxDate - minDate) / (1000 * 60 * 60 * 24);
+    const useWeekly = spanDays <= 120;
+
+    const buckets = {};
     clientEntries.forEach(entry => {
       const entryDate = getEntryDate(entry);
-      const monthKey = `${entryDate.getFullYear()}-${String(entryDate.getMonth() + 1).padStart(2, '0')}`;
-      
-      if (!monthlyData[monthKey]) {
-        monthlyData[monthKey] = {
-          month: monthKey,
-          label: new Date(entryDate.getFullYear(), entryDate.getMonth(), 1)
-            .toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+      let key;
+      let label;
+
+      if (useWeekly) {
+        // Week starts Monday
+        const dow = entryDate.getDay();
+        const daysSinceMonday = (dow + 6) % 7;
+        const weekStart = new Date(entryDate.getFullYear(), entryDate.getMonth(), entryDate.getDate() - daysSinceMonday);
+        key = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+        label = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      } else {
+        const monthStart = new Date(entryDate.getFullYear(), entryDate.getMonth(), 1);
+        key = `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`;
+        label = monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      }
+
+      if (!buckets[key]) {
+        buckets[key] = {
+          key,
+          label,
           billableHours: 0,
           opsHours: 0,
           totalHours: 0,
@@ -351,23 +376,52 @@ const ClientDetailView = ({ clientName }) => {
           count: 0,
         };
       }
-      
+
       const billableHours = entry.billableHours || 0;
-      monthlyData[monthKey].billableHours += billableHours;
-      monthlyData[monthKey].opsHours += entry.opsHours || 0;
-      monthlyData[monthKey].totalHours += billableHours + (entry.opsHours || 0);
-      monthlyData[monthKey].takeHomeEarnings += entry.earnings || 0;
-      monthlyData[monthKey].count += 1;
-      
-      // Calculate gross billables
+      buckets[key].billableHours += billableHours;
+      buckets[key].opsHours += entry.opsHours || 0;
+      buckets[key].totalHours += billableHours + (entry.opsHours || 0);
+      buckets[key].takeHomeEarnings += entry.earnings || 0;
+      buckets[key].count += 1;
+
       const attorney = userMap[entry.userId] || entry.userId;
       if (attorney && billableHours > 0) {
         const rate = getRate(attorney, entryDate);
-        monthlyData[monthKey].grossBillables += rate * billableHours;
+        buckets[key].grossBillables += rate * billableHours;
       }
     });
 
-    return Object.values(monthlyData).sort((a, b) => a.month.localeCompare(b.month));
+    const sorted = Object.values(buckets).sort((a, b) => a.key.localeCompare(b.key));
+
+    // Projection for current (incomplete) period
+    const today = new Date();
+    let currentKey;
+    let elapsedFraction;
+    if (useWeekly) {
+      const dow = today.getDay();
+      const daysSinceMonday = (dow + 6) % 7;
+      const weekStart = new Date(today.getFullYear(), today.getMonth(), today.getDate() - daysSinceMonday);
+      currentKey = `${weekStart.getFullYear()}-${String(weekStart.getMonth() + 1).padStart(2, '0')}-${String(weekStart.getDate()).padStart(2, '0')}`;
+      // Elapsed days including today, of 7
+      elapsedFraction = Math.min(7, daysSinceMonday + 1) / 7;
+    } else {
+      currentKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+      const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+      elapsedFraction = today.getDate() / daysInMonth;
+    }
+
+    const lastIdx = sorted.length - 1;
+    if (lastIdx >= 0 && sorted[lastIdx].key === currentKey && elapsedFraction > 0 && elapsedFraction < 1) {
+      const last = sorted[lastIdx];
+      const projected = last.billableHours / elapsedFraction;
+      last.projectedBillable = projected;
+      // Anchor projection line on previous bucket so dotted segment connects
+      if (lastIdx - 1 >= 0) {
+        sorted[lastIdx - 1].projectedBillable = sorted[lastIdx - 1].billableHours;
+      }
+    }
+
+    return sorted;
   }, [clientEntries, getRate, userMap]);
 
   // Recent entries (sorted by date, most recent first)
@@ -567,23 +621,33 @@ const ClientDetailView = ({ clientName }) => {
         {clientEntries.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Monthly Trend */}
-            {monthlyTrend.length > 1 && (
+            {trendData.length > 1 && (
               <div className="bg-white p-6 rounded-lg shadow">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Hours Trend Over Time</h3>
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={monthlyTrend}>
+                  <LineChart data={trendData}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="label" />
                     <YAxis />
                     <Tooltip content={<CustomChartTooltip />} />
                     <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey="billableHours" 
+                    <Line
+                      type="monotone"
+                      dataKey="billableHours"
                       stroke={CHART.ops}
-                      strokeWidth={2} 
+                      strokeWidth={2}
                       name="Billable Hours"
                       dot={{ r: 4 }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="projectedBillable"
+                      stroke={CHART.ops}
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      name="Projected (current period)"
+                      dot={{ r: 3, strokeDasharray: '' }}
+                      connectNulls
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -631,7 +695,7 @@ const ClientDetailView = ({ clientName }) => {
                       <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip 
+                  <Tooltip
                     formatter={(value) => [`${formatHours(value)}h`]}
                     contentStyle={{ borderRadius: '8px', border: `1px solid ${TOOLTIP_BORDER}` }}
                   />

@@ -65,6 +65,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
     transactionData,
     matterData,
     downloadData,
+    attorneyDownloadData,
     opsData,
     clientData,
     clientCounts,
@@ -284,6 +285,7 @@ const AnalyticsDashboard = ({ downloadsOnly = false, transactionsOpsOnly = false
             globalAttorneyFilter={effectiveAttorneyFilter}
             allAttorneyNames={allAttorneyNames}
             downloadData={downloadData}
+            attorneyDownloadData={attorneyDownloadData}
           />
         )}
       </div>

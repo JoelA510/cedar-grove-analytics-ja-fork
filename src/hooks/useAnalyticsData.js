@@ -713,6 +713,66 @@ export const useAnalyticsData = ({
       .sort((a, b) => b.downloads - a.downloads);
   }, [allDownloadEvents, dateRangeInfo, dateRange]);
 
+  // Per-attorney download aggregate (date-range filtered)
+  const attorneyDownloadData = useMemo(() => {
+    if (!allDownloadEvents || allDownloadEvents.length === 0) return [];
+
+    const { startDate, endDate } = dateRangeInfo;
+    const filtered = allDownloadEvents.filter(event => {
+      if (!event.date) return false;
+      if (dateRange === 'all-time') return true;
+      const eventDate = new Date(event.date + 'T00:00:00');
+      return eventDate >= startDate && eventDate <= endDate;
+    });
+
+    const userStats = {};
+    filtered.forEach(event => {
+      const user = event.user;
+      if (!user) return;
+      if (!userStats[user]) {
+        userStats[user] = {
+          user,
+          totalDownloads: 0,
+          files: {},
+          folderCounts: {},
+          lastDownload: '',
+          lastFile: '',
+        };
+      }
+      const stats = userStats[user];
+      stats.totalDownloads += 1;
+
+      const folder = event.folderName || event.folder || 'Unknown';
+      stats.folderCounts[folder] = (stats.folderCounts[folder] || 0) + 1;
+
+      if (event.file) {
+        stats.files[event.file] = (stats.files[event.file] || 0) + 1;
+      }
+      if (event.ts && event.ts > stats.lastDownload) {
+        stats.lastDownload = event.ts;
+        stats.lastFile = event.file || '';
+      }
+    });
+
+    return Object.values(userStats)
+      .map(stat => {
+        const fileEntries = Object.entries(stat.files);
+        const topFile = fileEntries.length
+          ? fileEntries.sort((a, b) => b[1] - a[1])[0]
+          : null;
+        return {
+          user: stat.user,
+          totalDownloads: stat.totalDownloads,
+          uniqueFiles: fileEntries.length,
+          lastDownload: stat.lastDownload,
+          lastFile: stat.lastFile,
+          folderCounts: stat.folderCounts,
+          topFile: topFile ? { file: topFile[0], count: topFile[1] } : null,
+        };
+      })
+      .sort((a, b) => b.totalDownloads - a.totalDownloads);
+  }, [allDownloadEvents, dateRangeInfo, dateRange]);
+
   // Process ops data (from ops entries only)
   const opsData = useMemo(() => {
     const opsStats = {};
@@ -964,6 +1024,7 @@ export const useAnalyticsData = ({
     transactionData,
     matterData,
     downloadData,
+    attorneyDownloadData,
     opsData,
     clientData,
     clientCounts,

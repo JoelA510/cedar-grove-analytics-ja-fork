@@ -29,14 +29,15 @@ const AttorneysView = ({
     const attorneys = [...attorneyData];
 
     attorneys.sort((a, b) => {
-      // Primary sort: FTE before PTE
-      const aType = a.employmentType || 'FTE';
-      const bType = b.employmentType || 'FTE';
-      if (aType !== bType) {
-        return aType === 'FTE' ? -1 : 1;
+      // FTE-before-PTE grouping only when sorting by name; numeric columns rank purely by metric
+      if (sortConfig.key === 'name') {
+        const aType = a.employmentType || 'FTE';
+        const bType = b.employmentType || 'FTE';
+        if (aType !== bType) {
+          return aType === 'FTE' ? -1 : 1;
+        }
       }
 
-      // Secondary sort: user-selected column
       let aVal, bVal;
 
       switch (sortConfig.key) {
