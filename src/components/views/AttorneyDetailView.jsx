@@ -97,7 +97,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
   const dataWarnings = useDataWarnings();
 
   // Date range state
-  const [dateRange, setDateRange] = useState('current-month');
+  const [dateRange, setDateRange] = useState('all-time');
   const [customDateStart, setCustomDateStart] = useState('');
   const [customDateEnd, setCustomDateEnd] = useState('');
   const [showDateDropdown, setShowDateDropdown] = useState(false);
