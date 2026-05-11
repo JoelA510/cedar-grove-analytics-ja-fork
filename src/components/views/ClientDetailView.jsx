@@ -361,7 +361,7 @@ const ClientDetailView = ({ clientName }) => {
       } else {
         const monthStart = new Date(entryDate.getFullYear(), entryDate.getMonth(), 1);
         key = `${monthStart.getFullYear()}-${String(monthStart.getMonth() + 1).padStart(2, '0')}`;
-        label = monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        label = monthStart.toLocaleDateString('en-US', { month: 'short' });
       }
 
       if (!buckets[key]) {
@@ -627,7 +627,7 @@ const ClientDetailView = ({ clientName }) => {
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={trendData}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" />
+                    <XAxis dataKey="label" interval={0} />
                     <YAxis />
                     <Tooltip content={<CustomChartTooltip />} />
                     <Legend />

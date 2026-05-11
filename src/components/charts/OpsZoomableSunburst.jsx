@@ -11,16 +11,22 @@ const OpsZoomableSunburst = ({ data, title = "Ops Time Distribution", minPercent
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
   // Transform flat ops data into hierarchical structure for sunburst
-  // Combine small categories into "Other" to avoid visual clutter
+  // Combine small categories into "Other" to avoid visual clutter.
+  // Any real "Other" category from the data is folded into the same bucket
+  // so we never render two top-level "Other" slices.
   const hierarchicalData = useMemo(() => {
     // Calculate total hours to determine percentages
     const totalHours = data.reduce((sum, cat) => sum + (cat.hours || 0), 0);
-    
-    // Separate into main categories and small categories
+
+    // Pull out the real "Other" category (if any) so it always merges with small cats
+    const realOther = data.find(cat => cat.category === 'Other') || null;
+    const rest = realOther ? data.filter(cat => cat.category !== 'Other') : data;
+
+    // Separate remaining categories into main and small
     const mainCategories = [];
     const smallCategories = [];
-    
-    data.forEach(category => {
+
+    rest.forEach(category => {
       const percentage = totalHours > 0 ? (category.hours / totalHours) * 100 : 0;
       if (percentage >= minPercentage) {
         mainCategories.push(category);
@@ -28,7 +34,7 @@ const OpsZoomableSunburst = ({ data, title = "Ops Time Distribution", minPercent
         smallCategories.push(category);
       }
     });
-    
+
     // Build children array with main categories
     const children = mainCategories.map(category => ({
       name: category.category,
@@ -41,25 +47,25 @@ const OpsZoomableSunburst = ({ data, title = "Ops Time Distribution", minPercent
         parentCategory: category.category
       }))
     }));
-    
-    // If there are small categories, combine them into "Other"
-    if (smallCategories.length > 0) {
-      const otherTotalHours = smallCategories.reduce((sum, cat) => sum + (cat.hours || 0), 0);
+
+    // Collect everything that should sit under the "Other" bucket
+    const bucketMembers = [...smallCategories];
+    if (realOther) bucketMembers.push(realOther);
+
+    if (bucketMembers.length > 0) {
+      const otherTotalHours = bucketMembers.reduce((sum, cat) => sum + (cat.hours || 0), 0);
       const otherPercentage = totalHours > 0 ? (otherTotalHours / totalHours) * 100 : 0;
-      
-      // Create "Other" category with individual small categories as children
+
       const otherCategory = {
-        name: `Other (${smallCategories.length})`,
+        name: `Other (${bucketMembers.length})`,
         hours: otherTotalHours,
         percentage: otherPercentage,
         isOtherGroup: true,
-        // Children are the individual small categories (which can be drilled into)
-        children: smallCategories.map(category => ({
+        children: bucketMembers.map(category => ({
           name: category.category,
           hours: category.hours,
           percentage: category.percentage,
           isSmallCategory: true,
-          // Grandchildren are attorneys within each small category
           children: Object.entries(category.byAttorney || {}).map(([attorney, stats]) => ({
             name: attorney,
             hours: stats.hours,
@@ -68,10 +74,10 @@ const OpsZoomableSunburst = ({ data, title = "Ops Time Distribution", minPercent
           }))
         }))
       };
-      
+
       children.push(otherCategory);
     }
-    
+
     return {
       name: "Ops",
       children

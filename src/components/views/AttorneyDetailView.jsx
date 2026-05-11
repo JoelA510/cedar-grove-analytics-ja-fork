@@ -485,7 +485,7 @@ const AttorneyDetailView = ({ attorneyName }) => {
         monthlyData[monthKey] = {
           month: monthKey,
           label: new Date(entryDate.getFullYear(), entryDate.getMonth(), 1)
-            .toLocaleDateString('en-US', { month: 'short', year: '2-digit' }),
+            .toLocaleDateString('en-US', { month: 'short' }),
           billableHours: 0,
           opsHours: 0,
           totalHours: 0,
@@ -769,13 +769,13 @@ const AttorneyDetailView = ({ attorneyName }) => {
                 <ResponsiveContainer width="100%" height={300}>
                   <LineChart data={monthlyTrend}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="label" />
+                    <XAxis dataKey="label" interval={0} />
                     <YAxis />
                     <Tooltip content={<CustomChartTooltip />} />
                     <Legend />
-                    <Line 
-                      type="monotone" 
-                      dataKey="billableHours" 
+                    <Line
+                      type="monotone"
+                      dataKey="billableHours"
                       stroke={CHART.billable}
                       strokeWidth={2} 
                       name="Billable Hours"

@@ -7,56 +7,67 @@ import { DateRangeIndicator } from '../shared';
 import { TopTransactionsChart, BillableVsOpsChart } from '../charts';
 
 const COHORT_OPTIONS = [
-  { value: 'all', label: 'All' },
-  { value: 'FTE', label: 'FTE' },
-  { value: 'PTE', label: 'PTE' },
+  { value: 'fte-lawyers', label: 'FTE Lawyers' },
+  { value: 'pte-lawyers', label: 'PTE Lawyers' },
+  { value: 'lawyers', label: 'All Lawyers' },
+  { value: 'full-team', label: 'Full Team' },
 ];
+
+const COHORT_LABELS = {
+  'fte-lawyers': 'FTE lawyers',
+  'pte-lawyers': 'PTE lawyers',
+  'lawyers': 'all lawyers',
+  'full-team': 'full team',
+};
+
+const isLawyer = (member) => (member.role || 'Attorney') === 'Attorney';
+
+const filterByCohort = (members, cohort) => {
+  switch (cohort) {
+    case 'fte-lawyers':
+      return members.filter((m) => isLawyer(m) && m.employmentType === 'FTE');
+    case 'pte-lawyers':
+      return members.filter((m) => isLawyer(m) && m.employmentType === 'PTE');
+    case 'lawyers':
+      return members.filter(isLawyer);
+    case 'full-team':
+    default:
+      return members;
+  }
+};
 
 const OverviewView = ({
   dateRangeLabel,
   filteredEntriesCount,
   globalAttorneyFilter,
   allAttorneyNames,
-  avgUtilization,
-  avgUtilizationFTE = 0,
-  avgUtilizationPTE = 0,
-  attorneyCountFTE = 0,
-  attorneyCountPTE = 0,
-  attorneyCountTotal = 0,
-  totalBillable,
-  totalOps,
-  totalBillableTarget,
-  totalOpsTarget,
-  totalGrossBillables,
   periodRevenueAccrued = null,
   attorneyData,
   transactionData,
 }) => {
-  const [cohort, setCohort] = useState('all');
-  const showRevenueAccrued = cohort === 'all' && periodRevenueAccrued != null;
+  const [cohort, setCohort] = useState('lawyers');
+  const showRevenueAccrued = cohort === 'full-team' && periodRevenueAccrued != null;
 
   const cohortMetrics = useMemo(() => {
-    if (cohort === 'all') {
-      return {
-        billable: totalBillable,
-        ops: totalOps,
-        billableTarget: totalBillableTarget,
-        opsTarget: totalOpsTarget,
-        grossBillables: periodRevenueAccrued != null ? periodRevenueAccrued : (totalGrossBillables || 0),
-        utilization: avgUtilization,
-        attorneyCount: attorneyCountTotal,
-      };
-    }
-
-    const subset = (attorneyData || []).filter(
-      (a) => a.employmentType === cohort
-    );
+    const subset = filterByCohort(attorneyData || [], cohort);
 
     const billable = subset.reduce((acc, a) => acc + (a.billable || 0), 0);
     const ops = subset.reduce((acc, a) => acc + (a.ops || 0), 0);
     const billableTarget = subset.reduce((acc, a) => acc + (a.billableTarget || 0), 0);
     const opsTarget = subset.reduce((acc, a) => acc + (a.opsTarget || 0), 0);
-    const grossBillables = subset.reduce((acc, a) => acc + (a.earnings || 0), 0);
+    const earnings = subset.reduce((acc, a) => acc + (a.earnings || 0), 0);
+    const grossBillables = cohort === 'full-team' && periodRevenueAccrued != null
+      ? periodRevenueAccrued
+      : earnings;
+
+    const utilizationValues = subset.map((a) => {
+      const total = (a.billable || 0) + (a.ops || 0);
+      const target = a.target || 0;
+      return target > 0 ? (total / target) * 100 : 0;
+    });
+    const utilization = utilizationValues.length > 0
+      ? Math.round(utilizationValues.reduce((acc, v) => acc + v, 0) / utilizationValues.length)
+      : 0;
 
     return {
       billable,
@@ -64,25 +75,10 @@ const OverviewView = ({
       billableTarget,
       opsTarget,
       grossBillables,
-      utilization: cohort === 'FTE' ? avgUtilizationFTE : avgUtilizationPTE,
-      attorneyCount: cohort === 'FTE' ? attorneyCountFTE : attorneyCountPTE,
+      utilization,
+      attorneyCount: subset.length,
     };
-  }, [
-    cohort,
-    attorneyData,
-    totalBillable,
-    totalOps,
-    totalBillableTarget,
-    totalOpsTarget,
-    totalGrossBillables,
-    periodRevenueAccrued,
-    avgUtilization,
-    avgUtilizationFTE,
-    avgUtilizationPTE,
-    attorneyCountTotal,
-    attorneyCountFTE,
-    attorneyCountPTE,
-  ]);
+  }, [cohort, attorneyData, periodRevenueAccrued]);
 
   const totalHours = cohortMetrics.billable + cohortMetrics.ops;
   const billablePercentage = totalHours > 0 ? Math.round((cohortMetrics.billable / totalHours) * 100) : 0;
@@ -93,7 +89,8 @@ const OverviewView = ({
   const opsProgress = cohortMetrics.opsTarget > 0
     ? Math.round((cohortMetrics.ops / cohortMetrics.opsTarget) * 100)
     : 0;
-  const cohortLabel = cohort === 'all' ? 'all attorneys' : `${cohort} attorneys`;
+  const cohortLabel = COHORT_LABELS[cohort] || 'team';
+  const memberNoun = cohort === 'full-team' ? 'members' : 'lawyers';
 
   return (
     <div className="space-y-6">
@@ -108,9 +105,7 @@ const OverviewView = ({
       <div className="flex items-center justify-between">
         <div className="text-sm text-gray-600">
           Viewing: <span className="font-medium text-gray-900">{cohortLabel}</span>
-          {cohort !== 'all' && (
-            <span className="text-gray-500"> ({cohortMetrics.attorneyCount})</span>
-          )}
+          <span className="text-gray-500"> ({cohortMetrics.attorneyCount})</span>
         </div>
         <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1 shadow-sm">
           {COHORT_OPTIONS.map((opt) => (
@@ -141,7 +136,7 @@ const OverviewView = ({
             <div className="text-3xl font-bold text-gray-900">{cohortMetrics.utilization}%</div>
           </div>
           <div className="text-sm text-gray-600 text-center">
-            {cohortMetrics.attorneyCount} {cohort === 'all' ? 'attorneys' : `${cohort} attorneys`}
+            {cohortMetrics.attorneyCount} {memberNoun}
           </div>
         </div>
 
