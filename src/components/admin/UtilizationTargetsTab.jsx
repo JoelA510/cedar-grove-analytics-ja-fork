@@ -22,6 +22,14 @@ const MONTHS = [
 
 const YEARS = [2024, 2025, 2026, 2027];
 
+const QUARTERS = [
+  { value: 'all', label: 'All Year', months: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] },
+  { value: 'Q1', label: 'Q1', months: [0, 1, 2] },
+  { value: 'Q2', label: 'Q2', months: [3, 4, 5] },
+  { value: 'Q3', label: 'Q3', months: [6, 7, 8] },
+  { value: 'Q4', label: 'Q4', months: [9, 10, 11] },
+];
+
 const buildEmptyUserMatrix = () => {
   const matrix = {};
   MONTHS.forEach(m => {
@@ -36,18 +44,18 @@ const monthTotal = (cell) => {
   return Math.round((c + o) * 100) / 100;
 };
 
-const annualTotal = (userMatrix) =>
-  MONTHS.reduce((sum, m) => sum + monthTotal(userMatrix?.[m.idx]), 0);
+const sumTotal = (userMatrix, monthList) =>
+  monthList.reduce((sum, m) => sum + monthTotal(userMatrix?.[m.idx]), 0);
 
-const annualBillable = (userMatrix) =>
-  MONTHS.reduce((sum, m) => sum + (parseFloat(userMatrix?.[m.idx]?.client) || 0), 0);
+const sumBillable = (userMatrix, monthList) =>
+  monthList.reduce((sum, m) => sum + (parseFloat(userMatrix?.[m.idx]?.client) || 0), 0);
 
-const annualOps = (userMatrix) =>
-  MONTHS.reduce((sum, m) => sum + (parseFloat(userMatrix?.[m.idx]?.ops) || 0), 0);
+const sumOps = (userMatrix, monthList) =>
+  monthList.reduce((sum, m) => sum + (parseFloat(userMatrix?.[m.idx]?.ops) || 0), 0);
 
-const TargetTable = ({ title, users, matrix, onChange }) => {
+const TargetTable = ({ title, users, matrix, onChange, visibleMonths, summaryLabel, showMonthTotals }) => {
   const maxRow = users.length - 1;
-  const maxCol = MONTHS.length * 2 - 1;
+  const maxCol = visibleMonths.length * 2 - 1;
 
   const focusCell = (table, r, c) => {
     if (r < 0 || r > maxRow || c < 0 || c > maxCol) return false;
@@ -136,35 +144,54 @@ const TargetTable = ({ title, users, matrix, onChange }) => {
         if (r < 0 || r > maxRow || c < 0 || c > maxCol) return;
         const u = users[r];
         if (!u) return;
-        const monthIdx = Math.floor(c / 2);
+        const month = visibleMonths[Math.floor(c / 2)];
+        if (!month) return;
         const field = c % 2 === 0 ? 'client' : 'ops';
-        onChange(u.id, monthIdx, field, val.trim());
+        onChange(u.id, month.idx, field, val.trim());
       });
     });
   };
 
   return (
-  <div className="bg-white rounded-lg shadow overflow-x-auto">
-    <table className="w-full text-xs border-collapse">
+  <div className={`bg-white rounded-lg shadow overflow-x-auto ${showMonthTotals ? 'w-fit max-w-full mx-auto' : ''}`}>
+    <table className={`text-xs border-collapse ${showMonthTotals ? 'table-fixed' : 'w-full'}`}>
+      {showMonthTotals && (
+        <colgroup>
+          <col style={{ width: '176px' }} />
+          {visibleMonths.map(m => (
+            <Fragment key={`cg-${m.idx}`}>
+              <col style={{ width: '76px' }} />
+              <col style={{ width: '76px' }} />
+              <col style={{ width: '56px' }} />
+            </Fragment>
+          ))}
+          <col style={{ width: '56px' }} />
+          <col style={{ width: '56px' }} />
+          <col style={{ width: '64px' }} />
+        </colgroup>
+      )}
       <thead className="bg-cg-green text-white">
         <tr>
           <th rowSpan={2} className="px-2 py-1 text-left align-middle whitespace-nowrap border-r-2 border-cg-dark text-sm">
             {title}
           </th>
-          {MONTHS.map(m => (
-            <th key={m.idx} colSpan={2} className="px-1 py-1 text-center border-l-2 border-cg-dark font-semibold">
+          {visibleMonths.map(m => (
+            <th key={m.idx} colSpan={showMonthTotals ? 3 : 2} className="px-1 py-1 text-center border-l-2 border-cg-dark font-semibold">
               {m.short}
             </th>
           ))}
           <th colSpan={3} className="px-1 py-1 text-center border-l-2 border-cg-dark font-semibold text-sm">
-            Annual
+            {summaryLabel}
           </th>
         </tr>
         <tr>
-          {MONTHS.map(m => (
+          {visibleMonths.map(m => (
             <Fragment key={m.idx}>
               <th className="px-0.5 py-0.5 text-[10px] font-normal border-l-2 border-cg-dark">Client</th>
               <th className="px-0.5 py-0.5 text-[10px] font-normal">Ops</th>
+              {showMonthTotals && (
+                <th className="px-0.5 py-0.5 text-[10px] font-normal">Total</th>
+              )}
             </Fragment>
           ))}
           <th className="px-0.5 py-0.5 text-[10px] font-normal border-l-2 border-cg-dark">Client</th>
@@ -180,10 +207,10 @@ const TargetTable = ({ title, users, matrix, onChange }) => {
               <td className="px-2 py-0.5 font-medium text-gray-900 whitespace-nowrap border-r-2 border-cg-dark text-sm">
                 {u.name || u.id}
               </td>
-              {MONTHS.map(m => {
+              {visibleMonths.map((m, colIdx) => {
                 const cell = userMatrix[m.idx] || { client: '', ops: '' };
-                const clientCol = m.idx * 2;
-                const opsCol = m.idx * 2 + 1;
+                const clientCol = colIdx * 2;
+                const opsCol = colIdx * 2 + 1;
                 return (
                   <Fragment key={m.idx}>
                     <td className="px-0.5 py-0.5 border-l-2 border-cg-dark">
@@ -195,7 +222,7 @@ const TargetTable = ({ title, users, matrix, onChange }) => {
                         onPaste={(e) => handlePaste(e, rowIdx, clientCol)}
                         data-row={rowIdx}
                         data-col={clientCol}
-                        className="no-spinner w-full px-1 py-0.5 text-xs text-right border border-gray-200 rounded focus:ring-1 focus:ring-cg-green focus:border-cg-green"
+                        className={`no-spinner ${showMonthTotals ? 'w-16' : 'w-full'} px-1 py-0.5 text-xs text-right border border-gray-200 rounded focus:ring-1 focus:ring-cg-green focus:border-cg-green`}
                         min="0"
                         step="1"
                       />
@@ -209,29 +236,34 @@ const TargetTable = ({ title, users, matrix, onChange }) => {
                         onPaste={(e) => handlePaste(e, rowIdx, opsCol)}
                         data-row={rowIdx}
                         data-col={opsCol}
-                        className="no-spinner w-full px-1 py-0.5 text-xs text-right border border-gray-200 rounded focus:ring-1 focus:ring-cg-green focus:border-cg-green"
+                        className={`no-spinner ${showMonthTotals ? 'w-16' : 'w-full'} px-1 py-0.5 text-xs text-right border border-gray-200 rounded focus:ring-1 focus:ring-cg-green focus:border-cg-green`}
                         min="0"
                         step="1"
                       />
                     </td>
+                    {showMonthTotals && (
+                      <td className="px-1 py-0.5 text-right text-xs font-medium text-gray-700 whitespace-nowrap bg-gray-50">
+                        {monthTotal(cell) || ''}
+                      </td>
+                    )}
                   </Fragment>
                 );
               })}
               <td className="px-1 py-0.5 text-right text-xs text-gray-700 border-l-2 border-cg-dark whitespace-nowrap">
-                {annualBillable(userMatrix) || ''}
+                {sumBillable(userMatrix, visibleMonths) || ''}
               </td>
               <td className="px-1 py-0.5 text-right text-xs text-gray-700 whitespace-nowrap">
-                {annualOps(userMatrix) || ''}
+                {sumOps(userMatrix, visibleMonths) || ''}
               </td>
               <td className="px-1 py-0.5 text-right font-semibold text-gray-900 text-xs whitespace-nowrap">
-                {annualTotal(userMatrix) || ''}
+                {sumTotal(userMatrix, visibleMonths) || ''}
               </td>
             </tr>
           );
         })}
         {users.length === 0 && (
           <tr>
-            <td colSpan={MONTHS.length * 2 + 4} className="px-3 py-4 text-center text-gray-500">
+            <td colSpan={visibleMonths.length * (showMonthTotals ? 3 : 2) + 4} className="px-3 py-4 text-center text-gray-500">
               No members in this group.
             </td>
           </tr>
@@ -244,6 +276,7 @@ const TargetTable = ({ title, users, matrix, onChange }) => {
 
 const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedQuarter, setSelectedQuarter] = useState('all');
   const [matrix, setMatrix] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -355,6 +388,13 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
     }
   };
 
+  const visibleMonths = useMemo(() => {
+    const q = QUARTERS.find(qq => qq.value === selectedQuarter) || QUARTERS[0];
+    return MONTHS.filter(m => q.months.includes(m.idx));
+  }, [selectedQuarter]);
+
+  const summaryLabel = selectedQuarter === 'all' ? 'Annual' : selectedQuarter;
+
   const groups = useMemo(() => {
     const pte = [];
     const fte = [];
@@ -420,24 +460,45 @@ const UtilizationTargetsTab = ({ users, usersLoading, refetch }) => {
       )}
 
       <div className="bg-white rounded-lg shadow p-4 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Calendar className="w-5 h-5 text-gray-600" />
-          <span className="font-medium text-gray-700">Year:</span>
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cg-green focus:border-transparent bg-white"
-          >
-            {YEARS.map(y => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
+        <div className="flex flex-wrap items-center gap-6">
+          <div className="flex items-center gap-3">
+            <Calendar className="w-5 h-5 text-gray-600" />
+            <span className="font-medium text-gray-700">Year:</span>
+            <select
+              value={selectedYear}
+              onChange={(e) => setSelectedYear(parseInt(e.target.value))}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cg-green focus:border-transparent bg-white"
+            >
+              {YEARS.map(y => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="font-medium text-gray-700">View:</span>
+            <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden">
+              {QUARTERS.map(q => (
+                <button
+                  key={q.value}
+                  type="button"
+                  onClick={() => setSelectedQuarter(q.value)}
+                  className={`px-3 py-2 text-sm font-medium transition-colors border-l border-gray-300 first:border-l-0 ${
+                    selectedQuarter === q.value
+                      ? 'bg-cg-green text-white'
+                      : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {q.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      <TargetTable title="Attorneys Full-time" users={groups.fte} matrix={matrix} onChange={handleChange} />
-      <TargetTable title="Attorneys Part-time" users={groups.pte} matrix={matrix} onChange={handleChange} />
-      <TargetTable title="Other" users={groups.other} matrix={matrix} onChange={handleChange} />
+      <TargetTable title="Attorneys Full-time" users={groups.fte} matrix={matrix} onChange={handleChange} visibleMonths={visibleMonths} summaryLabel={summaryLabel} showMonthTotals={selectedQuarter !== 'all'} />
+      <TargetTable title="Attorneys Part-time" users={groups.pte} matrix={matrix} onChange={handleChange} visibleMonths={visibleMonths} summaryLabel={summaryLabel} showMonthTotals={selectedQuarter !== 'all'} />
+      <TargetTable title="Other" users={groups.other} matrix={matrix} onChange={handleChange} visibleMonths={visibleMonths} summaryLabel={summaryLabel} showMonthTotals={selectedQuarter !== 'all'} />
 
       <div className="flex justify-end">
         <button
